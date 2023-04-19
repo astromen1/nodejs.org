@@ -1,0 +1,125 @@
+// The Either monad is a type of container that can hold one of two possible values, typically referred to as the Left and the Right. 
+// The Left and Right values are distinguished to provide additional context about the nature of the data being held.
+
+class Either {
+  
+  // The static of() method creates a new instance of Right with the given value.
+  static of(value) {
+    return new Right(value);
+  }
+
+  // The static left() method creates a new instance of Left with the given value.
+  static left(value) {
+    return new Left(value);
+  }
+}
+
+// The Left class extends the Either class and represents the Left side of the Either monad.
+class Left extends Either {
+
+  // The map() method returns this Left instance, as there is no value to transform.
+  map() {
+    return this;
+  }
+
+  // The chain() method returns this Left instance, as there is no value to pass to the given function.
+  chain() {
+    return this;
+  }
+}
+
+// The Right class extends the Either class and represents the Right side of the Either monad.
+class Right extends Either {
+
+  // The map() method applies the given function to the value contained in this Right instance and returns a new Right instance with the transformed value.
+  map(fn) {
+    return Either.of(fn(this.value));
+  }
+
+  // The chain() method applies the given function to the value contained in this Right instance and returns the result.
+  chain(fn) {
+    return fn(this.value);
+  }
+}// The IO monad is a container for side-effectful computations that can be safely composed and deferred. 
+class IO {
+  // The constructor takes an effectful computation as an argument and stores it as a property on the new IO instance.
+  constructor(effect) {
+    this.effect = effect;
+  }
+
+  // A static method used to create a new IO instance with a pure value.
+  static of(value) {
+    // Returns a new IO instance that wraps a function which returns the provided value.
+    return new IO(() => value);
+  }
+
+  // A method used to apply a function to the result of the computation contained within the IO instance, while preserving the structure of the monad.
+  map(fn) {
+    // Returns a new IO instance that wraps a function which applies the provided function to the result of the computation.
+    return new IO(() => fn(this.effect()));
+  }
+
+  // A method used to chain a function onto the computation contained within the IO instance.
+  chain(fn) {
+    // Returns a new IO instance created by mapping the provided function onto the computation, and then flattening the nested IO instances by joining them.
+    return this.map(fn).join();
+  }
+
+  // A method used to join nested IO instances.
+  join() {
+    // Returns a new IO instance that wraps a function which retrieves the result of the computation contained within the nested IO instance.
+    return new IO(() => this.effect().effect());
+  }
+
+  // A method used to run the computation contained within the IO instance.
+  run() {
+    // Returns the result of the computation.
+    return this.effect();
+  }
+}// Require the built-in `fs` module.
+const fs = require('fs');
+
+// A function used to read a file, returning a new IO instance that either wraps the file contents, or an error object if the file cannot be read.
+const readFile = (filename) =>
+  new IO(() => {
+    try {
+      // Attempt to read the file and return the contents wrapped in a Right Either instance.
+      return Either.of(fs.readFileSync(filename, 'utf8'));
+    } catch (error) {
+      // If the file cannot be read, return an error object wrapped in a Left Either instance.
+      return Either.left(error);
+    }
+  });
+
+// A function used to write to a file, returning a new IO instance that either wraps null, or an error object if the file cannot be written to.
+const writeFile = (filename, content) =>
+  new IO(() => {
+    try {
+      // Attempt to write to the file and return null wrapped in a Right Either instance.
+      fs.writeFileSync(filename, content, 'utf8');
+      return Either.of(null);
+    } catch (error) {
+      // If the file cannot be written to, return an error object wrapped in a Left Either instance.
+      return Either.left(error);
+    }
+  });
+
+// A function used to process file content by converting it to upper case.
+const processContent = (content) => content.toUpperCase();
+
+// A function that composes IO instances to read an input file, process its content, and write the result to an output file.
+const main = (inputFile, outputFile) =>
+  readFile(inputFile)
+    .chain((content) => content.map(processContent))
+    .chain((processedContent) => writeFile(outputFile, processedContent))
+    .run();
+
+// Execute the `main` function with input and output file names, and store the result in the `result` variable.
+const result = main('input.txt', 'output.txt');
+
+// Check the result of the computation and log either a success message or an error message.
+if (result instanceof Left) {
+  console.error('Error:', result.value);
+} else {
+  console.log('File processed successfully');
+}
